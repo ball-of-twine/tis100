@@ -32,8 +32,7 @@ IMAGE_LENGTH = IMAGE_WIDTH * IMAGE_HEIGHT
 MAX_STACK_SIZE = 15
 OP_ANY_READ_ORDER = ['LEFT', 'RIGHT', 'UP', 'DOWN']
 DIR_TO_CHAR = { UP: '↑', DOWN: '↓', LEFT: '←', RIGHT: '→' }
-IMAGE_PRINT_CHARS = [' ', 1, 2 ,3, 4]
-
+LINE_MARKER = ' > ' # more legible cross-terminal than ▸, and ▶ is less supported
 
 class CheckError extends Error
 
@@ -470,7 +469,7 @@ class MemoryNode extends Node
       if @stack.length <= i
         ret += '\n' if i > 0
         continue
-      ret += if @iptr is i then ' ▸ ' else '   '
+      ret += if @iptr is i then LINE_MARKER else '   '
       ret += @stack[i]
       ret += '\n' if i > 0
     # this version prints @stack.length lines, with last value at the bottom
@@ -546,7 +545,7 @@ class ComputeNode extends Node
       ret += " #{ DIR_TO_CHAR[dir.toUpperCase()] }=#{ @["port_#{ dir }"] ? '' }"
     ret += '\n'
     for instruction, i in @instructions
-      ret += if @iptr is i then ' ▸ ' else '   '
+      ret += if @iptr is i then LINE_MARKER else '   '
       ret += @iptrToLabel[i] + ':' if @iptrToLabel[i]?
       ret += ' ' + (instruction?.join(' ') ? '')
       ret += '\n' if i < @instructions.length - 1
