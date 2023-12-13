@@ -447,9 +447,36 @@ class MemoryNode extends Node
     #   ret += '\n' if i < @stack.length - 1
     return ret
 
+  # this function is required to handle when the memory node is full and it is
+  # read from and written to on the same cycle (being able to read/write same 
+  # cycle is the correct behavior). Without allowing an extra read (beyond the 
+  # max stack size) it would take two cycles, one to read, and a second to write
+  _allowExtraRead: ->
+    debug @name, 'has been read from UP or LEFT:', not @port_up?
+    return true if @port_up is null # means UP or LEFT neighbor read us first
+    for dir in ['RIGHT', 'DOWN']
+      switch dir
+        when 'RIGHT' then neighbor = @neighbor_right; myDir = 'LEFT'
+        when 'DOWN' then neighbor = @neighbor_down; myDir = 'UP'
+      continue unless neighbor?
+      debug @name, 'found', dir, 'neighbor'
+
+      debug @name, dir, 'neighbor\'s ptr is:', neighbor.iptr
+      neighbor_instruction = neighbor.instructions[neighbor.iptr]
+      continue unless neighbor_instruction?
+      debug @name, 'found neighbor instruction'
+
+      [op, arg1] = neighbor_instruction
+      debug @name, 'neighbor instruction op,arg1:', op, arg1
+      continue unless op in ['JRO', 'ADD', 'SUB', 'MOV']
+      return true if arg1 is 'LAST' and neighbor.last is myDir
+      return true if arg1 is myDir
+    return false
+
   stepOne: ->
     for dir in OP_ANY_READ_ORDER
-      break if @stack.length >= MAX_STACK_SIZE
+      break if @stack.length > MAX_STACK_SIZE
+      break if @stack.length = MAX_STACK_SIZE and not @_allowExtraRead()
 
       neighbor = @["neighbor_#{dir.toLowerCase()}"]
       switch dir
