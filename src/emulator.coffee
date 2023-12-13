@@ -26,7 +26,9 @@ MAX_COLUMNS = 18
 MIN_INT = -999
 MAX_INT = 999
 MAX_STREAM_LENGTH = 39
+MAX_STACK_SIZE = 15
 OP_ANY_READ_ORDER = ['LEFT', 'RIGHT', 'UP', 'DOWN']
+DIR_TO_CHAR = { UP: '↑', DOWN: '↓', LEFT: '←', RIGHT: '→' }
 
 class CheckError extends Error
 
@@ -417,7 +419,59 @@ class DamagedNode extends Node
 class MemoryNode extends Node
 
   constructor: ->
-    throw new Error("Memory nodes are unimplemented")
+    super()
+    @stack = []
+    @ptr = null
+    @_fillValue = null
+
+  toString: ->
+    ret = super.toString()
+    for dir in ['up', 'right', 'down', 'left']
+      ret += " #{ DIR_TO_CHAR[dir.toUpperCase()] }=#{ @["port_#{ dir }"] ? '' }"
+    ret += '\n'
+    # this version prints MAX_STACK_SIZE lines, with last value at the top
+    # this is the same orientation as the TIS100 game
+    i = MAX_STACK_SIZE
+    while i > 0
+      i--
+      if @stack.length <= i
+        ret += '\n' if i > 0
+        continue
+      ret += if @iptr is i then ' ▸ ' else '   '
+      ret += @stack[i]
+      ret += '\n' if i > 0
+    # this version prints @stack.length lines, with last value at the bottom
+    # for value, i in @stack
+    #   ret += " #{ if @ptr is i then LINE_ARROW else ' ' } "
+    #   ret += @stack[i]
+    #   ret += '\n' if i < @stack.length - 1
+    return ret
+
+  stepOne: ->
+    for dir in OP_ANY_READ_ORDER
+      break if @stack.length >= MAX_STACK_SIZE
+
+      neighbor = @["neighbor_#{dir.toLowerCase()}"]
+      switch dir
+        when 'LEFT' then value = neighbor.port_right
+        when 'RIGHT' then value = neighbor.port_left
+        when 'UP' then value = neighbor.port_down
+        when 'DOWN' then value = neighbor.port_up
+
+      if value?
+        debug @name, 'pushing', value, 'to stack (from', dir, 'neighbor)'
+        @stack.push(value)
+        # clear all of neighbor's ports -- as ANY writes to all of them
+        neighbor.port_up = neighbor.port_right = neighbor.port_down = neighbor.port_left = null
+
+  stepTwo: ->
+    if @ptr? and @port_up is null # Any port will do -- they've all been cleared.
+      debug @name, 'removing value at index', @ptr
+      @stack.splice(@ptr, 1)
+    
+    # update ptr/ports to last value/index of stack or null if empty
+    @ptr = if @stack.length > 0 then @stack.length - 1 else null
+    @port_up = @port_right = @port_down = @port_left = @stack[@ptr] or null
 
 class ComputeNode extends Node
 
@@ -451,8 +505,6 @@ class ComputeNode extends Node
     if @numLogicalInstructions > 0
       while not @instructions[@iptr]?
         @iptr++
-
-  DIR_TO_CHAR = { UP: '↑', DOWN: '↓', LEFT: '←', RIGHT: '→' }
 
   toString: ->
     ret = super.toString()
