@@ -427,6 +427,8 @@ class ComputeNode extends Node
     @acc = 0
     @bak = 0
     @mode = 'IDLE'
+    @last = null
+    @last_reader = null
 
     @_fillValue = null # See WRTE mode for MOVs.
 
@@ -522,6 +524,13 @@ class ComputeNode extends Node
 
     # Yay! A value to read! Clear the neighbor's ports. (MOV X ANY will fill all ports.)
     neighbor.port_up = neighbor.port_right = neighbor.port_down = neighbor.port_left = null
+    
+    # Update neighbor's @last_reader prop, so can update its @last prop if appropriate
+    switch dir
+      when 'UP' then neighbor.last_reader = 'DOWN'
+      when 'RIGHT' then neighbor.last_reader = 'LEFT'
+      when 'DOWN' then neighbor.last_reader = 'UP'
+      when 'LEFT' then neighbor.last_reader = 'RIGHT'
 
     # And we've got a value.
     return value
@@ -568,6 +577,7 @@ class ComputeNode extends Node
             for dir in OP_ANY_READ_ORDER
               value = @_readFromNeighbor dir
               if value?
+                @last = dir
                 @_advance value, false
                 break
               else
@@ -685,7 +695,9 @@ class ComputeNode extends Node
             when 'ANY'
               for dir in OP_ANY_READ_ORDER
                 value = @_readFromNeighbor dir
-                break if value?
+                if value?
+                  @last = dir
+                  break
             when 'LAST'
               if @last?
                 value = @_readFromNeighbor @last
@@ -756,6 +768,7 @@ class ComputeNode extends Node
       debug @name, 'needs to write', value, 'to', arg2 if value?
       if not value?
         debug @name, 'has been drained'
+        @last = @last_reader if arg2 is 'ANY'
         @_advance()
 
     return
