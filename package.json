@@ -23,7 +23,7 @@
     "url": "https://github.com/melograph85/tis100"
   },
   "devDependencies": {
-    "coffee-script": "^1.9.3",
+    "coffeescript": "^1.9.3",
     "pegjs": "^0.8.0"
   },
   "dependencies": {
