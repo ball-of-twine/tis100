@@ -26,9 +26,14 @@ MAX_COLUMNS = 18
 MIN_INT = -999
 MAX_INT = 999
 MAX_STREAM_LENGTH = 39
+IMAGE_WIDTH = 30
+IMAGE_HEIGHT = 18
+IMAGE_LENGTH = IMAGE_WIDTH * IMAGE_HEIGHT
 MAX_STACK_SIZE = 15
 OP_ANY_READ_ORDER = ['LEFT', 'RIGHT', 'UP', 'DOWN']
 DIR_TO_CHAR = { UP: '↑', DOWN: '↓', LEFT: '←', RIGHT: '→' }
+IMAGE_PRINT_CHARS = [' ', 1, 2 ,3, 4]
+
 
 class CheckError extends Error
 
@@ -116,14 +121,28 @@ class Emulator extends EventEmitter
       while i <= arr.length - 1
         table.push((arr[i+j]?.toString?() ? '') for j in [0...@layoutWidth])
         i += 4
-    ret += table.toString() + '\n'
-
-    for node in @outputs when node?
+    ret += table.toString() + '\n'  
+    
+    for node in @outputs when node instanceof OutputNode and not (node instanceof ImageNode)
       {name, actual, expected} = node
       ret += "#{ name }:\n"
       ret += " EXPECTED: #{ expected.join ' ' }\n"
       ret += " ACTUAL:   #{ (a for a in actual when a?).join ' ' }\n"
-    ret += '\n'
+
+    for node in @outputs when node instanceof ImageNode
+      table = new Table({ style: { 'padding-left': 0, 'padding-right': 0 }})
+      {expected, actual} = node
+      expectedImage = actualImage = ''
+      for i in [0...IMAGE_LENGTH]
+        expectedImage += IMAGE_PRINT_CHARS[expected[i]] ? ' '
+        actualImage += IMAGE_PRINT_CHARS[actual[i]] ? ' '
+        if (i+1) % IMAGE_WIDTH is 0 and i+1 isnt IMAGE_LENGTH
+          expectedImage += '\n'
+          actualImage += '\n'
+      
+      table.push [' Expected ', ' Actual ']
+      table.push [expectedImage, actualImage]
+      ret += table.toString() + '\n'
 
     return ret
 
@@ -242,15 +261,23 @@ class Emulator extends EventEmitter
               if inputs[pos]
                 throw new Error("Duplicate input streams for position #{ pos }: #{ name } and #{ inputs[pos] }")
               inputs[pos] = name
-            when 'STREAM_OUTPUT'
+            when 'STREAM_OUTPUT', 'STREAM_IMAGE'
               if outputs[pos]
                 throw new Error("Duplicate output streams for position #{ pos }: #{ name } and #{ outputs[pos] }")
               outputs[pos] = name
             else
               throw new Error("Unknown stream type #{ type } named #{ name }")
 
-          if stream.length > MAX_STREAM_LENGTH
-            throw new Error("Stream #{ name } length is greater than max #{ MAX_STREAM_LENGTH }")
+          # check output streams lengths are correct
+          switch type
+            when 'STREAM_IMAGE'
+              if stream.length isnt IMAGE_LENGTH
+                throw new Error("Image stream is wrong size, expected \
+                  #{ IMAGE_LENGTH } (#{IMAGE_WIDTH}x#{IMAGE_HEIGHT}), \
+                  got #{ stream.length }")
+            when 'STREAM_OUTPUT'
+              if stream.length > MAX_STREAM_LENGTH
+                throw new Error("Stream #{ name } length is greater than max #{ MAX_STREAM_LENGTH }")
 
         nodeIndex = 0
         for type, layoutIndex in @spec.layout
@@ -320,16 +347,22 @@ class Emulator extends EventEmitter
     @outputs = new Array(4)
     if @spec?.streams?
       for [type, name, pos, stream] in @spec.streams
-        if type is 'STREAM_INPUT'
-          node = new InputNode(stream)
-          node.layoutIndex = -4 + pos
-          node.name = name
-          @inputs[pos] = node
-        else
-          node = new OutputNode(stream)
-          node.layoutIndex = @maxNodes + pos
-          node.name = name
-          @outputs[pos] = node
+        switch type
+          when 'STREAM_INPUT'
+            node = new InputNode(stream)
+            node.layoutIndex = -4 + pos
+            node.name = name
+            @inputs[pos] = node
+          when 'STREAM_OUTPUT'
+            node = new OutputNode(stream)
+            node.layoutIndex = @maxNodes + pos
+            node.name = name
+            @outputs[pos] = node
+          when 'STREAM_IMAGE'
+            node = new ImageNode(stream)
+            node.layoutIndex = @maxNodes + pos
+            node.name = name
+            @outputs[pos] = node
 
     # Compute neighbors.
     #
@@ -889,6 +922,70 @@ class OutputNode extends Node
         @passed and= @actual[@ptr] is @expected[@ptr]
 
       @ptr++
+
+    return
+
+class ImageNode extends OutputNode
+
+  constructor: (@expected) ->
+    super(@expected)
+    @actual = (0 for _ in [0...@expected.length])
+    @x = null
+    @y = null
+    @ptr = null
+
+  _setPtr: ->
+    # set ptr if within bounds of image, otherwise leave null
+    return if @x >= IMAGE_WIDTH or @y >= IMAGE_HEIGHT
+    @ptr = @x + @y * IMAGE_WIDTH
+
+  _advancePtr: ->
+    @ptr++
+    @ptr = null if @ptr % IMAGE_WIDTH is 0
+
+  _isPassed: ->
+    for correct, i in @expected
+      return false if @actual[i] isnt correct and @actual[i] > 0
+    return true
+
+  _isFinished: ->
+    for correct, i in @expected
+      return false if @actual[i] isnt correct
+    return true
+
+  stepOne: ->
+    # We could do the READ/RUN mode flip-flop like in an InputNode, but it doesn't really matter.
+    return unless @neighbor_up?
+    value = @neighbor_up.port_down
+
+    if value?
+      @neighbor_up.port_up = @neighbor_up.port_right = @neighbor_up.port_down = @neighbor_up.port_left = null
+
+      # negative values reset the write sequence
+      if value < 0
+        @x = @y = @ptr = null
+        return
+      
+      # if x or y are null, fill those first
+      if @x is null
+        @x = value
+        return
+      
+      if @y is null
+        @y = value
+        @_setPtr()
+        return
+      
+      if @ptr?
+        # only values 0-4 are written (write 0 to override previously set values)
+        # however, larger values will still advance the cursor
+        @actual[@ptr] = value if value <= 4
+      # Update result status.
+      # For now, an image being finished is just the same as it passing
+      @passed = @_isPassed()
+      @finished = @_isFinished()
+
+      @_advancePtr() if @ptr?
 
     return
 

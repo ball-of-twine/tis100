@@ -22,6 +22,7 @@ jsonLua = jsonLua.replace /local OBJDEF = {[^}]+}/, (match) ->
 constants = [
   'STREAM_INPUT'
   'STREAM_OUTPUT'
+  'STREAM_IMAGE'
   'TILE_COMPUTE'
   'TILE_MEMORY'
   'TILE_DAMAGED'
@@ -77,9 +78,9 @@ exports.parse = (contents) ->
     if type not in ['TILE_COMPUTE', 'TILE_DAMAGED', 'TILE_MEMORY']
       throw new Error("Unknown tile type '#{ type }' at node #{ i }")
   for [type, name, index, stream], i in streams
-    if type not in ['STREAM_INPUT', 'STREAM_OUTPUT']
+    if type not in ['STREAM_INPUT', 'STREAM_OUTPUT', 'STREAM_IMAGE']
       throw new Error("Unknown stream type '#{ type }' at stream #{ i }")
-    if not /\S/.test name
+    if type isnt 'STREAM_IMAGE' and not /\S/.test name
       throw new Error("Stream #{ i } needs a name")
     if index < 0 or index >= layoutWidth
       throw new Error("Stream #{ i } position must be between 0 and #{ layoutWidth - 1 }")
