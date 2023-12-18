@@ -10,6 +10,7 @@
 # - No obviously-dumb performance mistakes, but no perf superstition either. (Profile later.)
 
 Table = require 'cli-table'
+colors = require 'colors'
 debug = require 'debug'
 fs = require 'fs'
 statslib = require 'stats-lite'
@@ -33,6 +34,11 @@ MAX_STACK_SIZE = 15
 OP_ANY_READ_ORDER = ['LEFT', 'RIGHT', 'UP', 'DOWN']
 DIR_TO_CHAR = { UP: '↑', DOWN: '↓', LEFT: '←', RIGHT: '→' }
 LINE_MARKER = ' > ' # more legible cross-terminal than ▸, and ▶ is less supported
+IMAGE_PRINT_CHARS = [' ', 1, 2 ,3, 4]
+# IMAGE_PRINT_CHARS = [' ', 1, 2 ,3, 4]
+# IMAGE_PRINT_CHARS = [' ','░','▒','█','▓'] # black, dark grey, bright grey, white, red
+IMAGE_PRINT_CHARS = ['█'.black, '█'.gray.dim, '█'.gray, '█'.white, '█'.red] # colors module
+
 
 class CheckError extends Error
 
